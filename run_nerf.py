@@ -265,7 +265,7 @@ def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
 def render(H, W, focal,
            chunk=1024*32, rays=None, c2w=None, ndc=True,
            near=0., far=1.,
-           use_viewdirs=False, c2w_staticcam=None,
+           use_viewdirs=False, c2w_staticcam=None, depth_img = None,
            **kwargs):
     """Render rays
 
@@ -291,23 +291,25 @@ def render(H, W, focal,
       acc_map: [batch_size]. Accumulated opacity (alpha) along a ray.
       extras: dict with everything returned by render_rays().
     """
-
     if c2w is not None:
         # special case to render full image
-        rays_o, rays_d = get_rays(H, W, focal, c2w)
+       rays_o, rays_d, depth = get_rays(H, W, focal, c2w, depth_img=depth_img)
     else:
         # use provided ray batch
-        if rays.shape[0]>2:
+        if depth_img is not None:
             rays_o, rays_d, depth = rays
         else :
-            rays_o, rays_d = rays
+           rays_o, rays_d = rays
 
     if use_viewdirs:
         # provide ray directions as input
         viewdirs = rays_d
+        # print("use_viewdirs")
+
         if c2w_staticcam is not None:
             # special case to visualize effect of viewdirs
             rays_o, rays_d = get_rays(H, W, focal, c2w_staticcam)
+            print("c2w_staticcam")
 
         # Make all directions unit magnitude.
         # shape: [batch_size, 3]
@@ -325,18 +327,15 @@ def render(H, W, focal,
     rays_d = tf.cast(tf.reshape(rays_d, [-1, 3]), dtype=tf.float32)
     
     
-    
-    if rays.shape[0]>2:
+    if depth_img is not None:
         alpha = 0.05
-        depth = tf.reshape(depth[..., 0], [-1,1]) * 4.0 + 2.0
+        depth = tf.reshape(depth[..., 0], [-1,1]) * 6.0
         near = depth - alpha
         far = depth + alpha
     else : 
-        near, far = near * \
-            tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
+       near, far = near * \
+           tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
 
-    # print("near2 :", near)
-    # print("far2 :", far)
     # (ray origin, ray direction, min dist, max dist) for each ray
     rays = tf.concat([rays_o, rays_d, near, far], axis=-1)
     if use_viewdirs:
@@ -354,7 +353,7 @@ def render(H, W, focal,
     ret_dict = {k: all_ret[k] for k in all_ret if k not in k_extract}
     return ret_list + [ret_dict]
 
-def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0):
+def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0, depth=None):
 
     H, W, focal = hwf
 
@@ -371,7 +370,11 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
     for i, c2w in enumerate(render_poses):
         print(i, time.time() - t)
         t = time.time()
-        rgb, disp, acc, _ = render(
+        if depth is not None:
+            rgb, disp, acc, _ = render(
+            H, W, focal, chunk=chunk, c2w=c2w[:3, :4], depth_img=depth[i], **render_kwargs)
+        else : 
+            rgb, disp, acc, _ = render(
             H, W, focal, chunk=chunk, c2w=c2w[:3, :4], **render_kwargs)
         rgbs.append(rgb.numpy())
         disps.append(disp.numpy())
@@ -809,11 +812,10 @@ def train():
             target = images[img_i]
             pose = poses[img_i, :3, :4]
             if args.use_depth:
-                print(len(depth_imgs))
                 depth_img = depth_imgs[img_i]
 
             if N_rand is not None:
-                rays_o, rays_d = get_rays(H, W, focal, pose)
+                rays_o, rays_d, _ = get_rays(H, W, focal, pose)
                 if i < args.precrop_iters:
                     dH = int(H//2 * args.precrop_frac)
                     dW = int(W//2 * args.precrop_frac)
@@ -848,9 +850,11 @@ def train():
         with tf.GradientTape() as tape:
 
             # Make predictions for color, disparity, accumulated opacity.
+            if batch_rays is None :
+                print("batch_rays is none!!!")
             rgb, disp, acc, extras = render(
                 H, W, focal, chunk=args.chunk, rays=batch_rays,
-                verbose=i < 10, retraw=True, **render_kwargs_train)
+                verbose=i < 10, retraw=True, depth_img=True, **render_kwargs_train)
 
             # Compute MSE loss between predicted and true RGB.
             img_loss = img2mse(rgb, target_s)
@@ -908,9 +912,10 @@ def train():
                 basedir, expname, 'testset_{:06d}'.format(i))
             os.makedirs(testsavedir, exist_ok=True)
             print('test poses shape', poses[i_test].shape)
+            print("i_test", i_test)
 
             render_path(poses[i_test], hwf, args.chunk, render_kwargs_test,
-                        gt_imgs=images[i_test], savedir=testsavedir)
+                        gt_imgs=images[i_test], savedir=testsavedir, depth=depth_imgs[i_test-13])
             print('Saved test set')
 
         if i % args.i_print == 0 or i < 10:

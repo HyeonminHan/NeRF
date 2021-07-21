@@ -44,12 +44,14 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
 
     all_imgs = []
     all_poses = []
+    all_depths = []
     counts = [0]
-    depth_imgs  = []
     for s in splits:
         meta = metas[s]
         imgs = []
         poses = []
+        depth_imgs  = []
+
         if s=='train' or testskip==0:
             skip = 1
         else:
@@ -59,7 +61,7 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
             fname = os.path.join(basedir, frame['file_path'] + '.png')
             imgs.append(imageio.imread(fname))
             poses.append(np.array(frame['transform_matrix']))
-            if use_depth and s == 'train':
+            if use_depth and (s == 'train' or s== 'test'):
                 fname_ = fname.split("/")
                 fname_d = '/'.join(fname_[:-1])+'/'+fname_[-1][:-4] + "_depth_0001.png"
                 depth_imgs.append(imageio.imread(fname_d))
@@ -77,6 +79,10 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
         counts.append(counts[-1] + imgs.shape[0])
         all_imgs.append(imgs)
         all_poses.append(poses)
+        if use_depth and (s == 'train' or s== 'test'):
+            depth_imgs = (np.array(depth_imgs) / 255.).astype(np.float32) 
+            all_depths.append(depth_imgs)
+
 
 
     i_split = [np.arange(counts[i], counts[i+1]) for i in range(3)]
@@ -85,7 +91,7 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
     poses = np.concatenate(all_poses, 0)
 
     if use_depth :
-        depth_imgs = (np.array(depth_imgs) / 255.).astype(np.float32) 
+        depth_imgs = np.concatenate(all_depths, 0)
     
     H, W = imgs[0].shape[:2]
     camera_angle_x = float(meta['camera_angle_x'])
