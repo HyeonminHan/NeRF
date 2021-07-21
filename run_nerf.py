@@ -26,7 +26,6 @@ def batchify(fn, chunk):
         return tf.concat([fn(inputs[i:i+chunk]) for i in range(0, inputs.shape[0], chunk)], 0)
     return ret
 
-
 def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     """Prepares inputs and applies network 'fn'."""
 
@@ -43,7 +42,6 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     outputs = tf.reshape(outputs_flat, list(
         inputs.shape[:-1]) + [outputs_flat.shape[-1]])
     return outputs
-
 
 def render_rays(ray_batch,
                 network_fn,
@@ -89,7 +87,6 @@ def render_rays(ray_batch,
       z_std: [num_rays]. Standard deviation of distances along ray for each
         sample.
     """
-
     def raw2outputs(raw, z_vals, rays_d):
         """Transforms model's predictions to semantically meaningful values.
 
@@ -168,28 +165,35 @@ def render_rays(ray_batch,
 
     # Extract ray origin, direction.
     rays_o, rays_d = ray_batch[:, 0:3], ray_batch[:, 3:6]  # [N_rays, 3] each
-
+    # print("rays_o in render_rays:", rays_o)
+    # print("rays_d in render_rays:", rays_d)
     # Extract unit-normalized viewing direction.
     viewdirs = ray_batch[:, -3:] if ray_batch.shape[-1] > 8 else None
 
     # Extract lower, upper bound for ray distance.
     bounds = tf.reshape(ray_batch[..., 6:8], [-1, 1, 2])
     near, far = bounds[..., 0], bounds[..., 1]  # [-1,1]
-
+    # print("near in render_rays:", near)
+    # print("far in render_rays:", far)
     # Decide where to sample along each ray. Under the logic, all rays will be sampled at
     # the same times.
     t_vals = tf.linspace(0., 1., N_samples)
-    if not lindisp:
+
+    # print("t_vals: ", t_vals)
+    # near - 2.0, far - 6.0
+    if not lindisp: ###here -lego
         # Space integration times linearly between 'near' and 'far'. Same
         # integration points will be used for all rays.
         z_vals = near * (1.-t_vals) + far * (t_vals)
     else:
         # Sample linearly in inverse depth (disparity).
         z_vals = 1./(1./near * (1.-t_vals) + 1./far * (t_vals))
+
     z_vals = tf.broadcast_to(z_vals, [N_rays, N_samples])
+    # print("z_vals in render_rays", z_vals)
 
     # Perturb sampling time along each ray.
-    if perturb > 0.:
+    if perturb > 0.: #default lego
         # get intervals between samples
         mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
         upper = tf.concat([mids, z_vals[..., -1:]], -1)
@@ -197,11 +201,14 @@ def render_rays(ray_batch,
         # stratified samples in those intervals
         t_rand = tf.random.uniform(z_vals.shape)
         z_vals = lower + (upper - lower) * t_rand
+    # print("rays_o2 in render_rays:", rays_o)
+    # print("rays_d2 in render_rays:", rays_d)
+    # print("z_vals2 in render_rays", z_vals)
 
     # Points in space to evaluate model at.
     pts = rays_o[..., None, :] + rays_d[..., None, :] * \
         z_vals[..., :, None]  # [N_rays, N_samples, 3]
-
+    # print("pts", pts)
     # Evaluate model at each point.
     raw = network_query_fn(pts, viewdirs, network_fn)  # [N_rays, N_samples, 4]
     rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(
@@ -242,7 +249,6 @@ def render_rays(ray_batch,
 
     return ret
 
-
 def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
     """Render rays in smaller minibatches to avoid OOM."""
     all_ret = {}
@@ -256,11 +262,10 @@ def batchify_rays(rays_flat, chunk=1024*32, **kwargs):
     all_ret = {k: tf.concat(all_ret[k], 0) for k in all_ret}
     return all_ret
 
-
 def render(H, W, focal,
            chunk=1024*32, rays=None, c2w=None, ndc=True,
            near=0., far=1.,
-           use_viewdirs=False, c2w_staticcam=None,
+           use_viewdirs=False, c2w_staticcam=None, depth_img = None,
            **kwargs):
     """Render rays
 
@@ -286,20 +291,25 @@ def render(H, W, focal,
       acc_map: [batch_size]. Accumulated opacity (alpha) along a ray.
       extras: dict with everything returned by render_rays().
     """
-
     if c2w is not None:
         # special case to render full image
-        rays_o, rays_d = get_rays(H, W, focal, c2w)
+       rays_o, rays_d, depth = get_rays(H, W, focal, c2w, depth_img=depth_img)
     else:
         # use provided ray batch
-        rays_o, rays_d = rays
+        if depth_img is not None:
+            rays_o, rays_d, depth = rays
+        else :
+           rays_o, rays_d = rays
 
     if use_viewdirs:
         # provide ray directions as input
         viewdirs = rays_d
+        # print("use_viewdirs")
+
         if c2w_staticcam is not None:
             # special case to visualize effect of viewdirs
             rays_o, rays_d = get_rays(H, W, focal, c2w_staticcam)
+            print("c2w_staticcam")
 
         # Make all directions unit magnitude.
         # shape: [batch_size, 3]
@@ -315,8 +325,16 @@ def render(H, W, focal,
     # Create ray batch
     rays_o = tf.cast(tf.reshape(rays_o, [-1, 3]), dtype=tf.float32)
     rays_d = tf.cast(tf.reshape(rays_d, [-1, 3]), dtype=tf.float32)
-    near, far = near * \
-        tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
+    
+    
+    if depth_img is not None:
+        alpha = 0.05
+        depth = tf.reshape(depth[..., 0], [-1,1]) * 6.0
+        near = depth - alpha
+        far = depth + alpha
+    else : 
+       near, far = near * \
+           tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
 
     # (ray origin, ray direction, min dist, max dist) for each ray
     rays = tf.concat([rays_o, rays_d, near, far], axis=-1)
@@ -335,8 +353,7 @@ def render(H, W, focal,
     ret_dict = {k: all_ret[k] for k in all_ret if k not in k_extract}
     return ret_list + [ret_dict]
 
-
-def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0):
+def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0, depth=None):
 
     H, W, focal = hwf
 
@@ -353,7 +370,11 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
     for i, c2w in enumerate(render_poses):
         print(i, time.time() - t)
         t = time.time()
-        rgb, disp, acc, _ = render(
+        if depth is not None:
+            rgb, disp, acc, _ = render(
+            H, W, focal, chunk=chunk, c2w=c2w[:3, :4], depth_img=depth[i], **render_kwargs)
+        else : 
+            rgb, disp, acc, _ = render(
             H, W, focal, chunk=chunk, c2w=c2w[:3, :4], **render_kwargs)
         rgbs.append(rgb.numpy())
         disps.append(disp.numpy())
@@ -373,7 +394,6 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
     disps = np.stack(disps, 0)
 
     return rgbs, disps
-
 
 def create_nerf(args):
     """Instantiate NeRF's MLP model."""
@@ -497,6 +517,10 @@ def config_parser():
                         help='specific weights npy file to reload for coarse network')
     parser.add_argument("--random_seed", type=int, default=None,
                         help='fix random seed for repeatability')
+    parser.add_argument("--use_depth", action='store_true',
+                        help='use depth information in training')
+
+
     
     # pre-crop options
     parser.add_argument("--precrop_iters", type=int, default=0,
@@ -613,8 +637,13 @@ def train():
         print('NEAR FAR', near, far)
 
     elif args.dataset_type == 'blender':
-        images, poses, render_poses, hwf, i_split = load_blender_data(
-            args.datadir, args.half_res, args.testskip)
+
+        if args.use_depth : 
+            images, poses, render_poses, hwf, i_split, depth_imgs = load_blender_data(
+            args.datadir, args.half_res, args.testskip, args.use_depth)
+        else:
+            images, poses, render_poses, hwf, i_split = load_blender_data(
+                args.datadir, args.half_res, args.testskip, args.use_depth)
         print('Loaded blender', images.shape,
               render_poses.shape, hwf, args.datadir)
         i_train, i_val, i_test = i_split
@@ -649,6 +678,7 @@ def train():
     H, W, focal = hwf
     H, W = int(H), int(W)
     hwf = [H, W, focal]
+    print("=============focal:", focal)
 
     if args.render_test:
         render_poses = np.array(poses[i_test])
@@ -760,6 +790,7 @@ def train():
         # Sample random ray batch
 
         if use_batching:
+            print("use_batching")
             # Random over all images
             batch = rays_rgb[i_batch:i_batch+N_rand]  # [B, 2+1, 3*?]
             batch = tf.transpose(batch, [1, 0, 2])
@@ -773,14 +804,17 @@ def train():
                 np.random.shuffle(rays_rgb)
                 i_batch = 0
 
-        else:
+        else:   #default lego
+
             # Random from one image
             img_i = np.random.choice(i_train)
             target = images[img_i]
             pose = poses[img_i, :3, :4]
+            if args.use_depth:
+                depth_img = depth_imgs[img_i]
 
             if N_rand is not None:
-                rays_o, rays_d = get_rays(H, W, focal, pose)
+                rays_o, rays_d, _ = get_rays(H, W, focal, pose)
                 if i < args.precrop_iters:
                     dH = int(H//2 * args.precrop_frac)
                     dW = int(W//2 * args.precrop_frac)
@@ -790,16 +824,24 @@ def train():
                         indexing='ij'), -1)
                     if i < 10:
                         print('precrop', dH, dW, coords[0,0], coords[-1,-1])
-                else:
+                else: ## lego default
                     coords = tf.stack(tf.meshgrid(
                         tf.range(H), tf.range(W), indexing='ij'), -1)
                 coords = tf.reshape(coords, [-1, 2])
                 select_inds = np.random.choice(
                     coords.shape[0], size=[N_rand], replace=False)
+
                 select_inds = tf.gather_nd(coords, select_inds[:, tf.newaxis])
                 rays_o = tf.gather_nd(rays_o, select_inds)
                 rays_d = tf.gather_nd(rays_d, select_inds)
-                batch_rays = tf.stack([rays_o, rays_d], 0)
+
+                
+                if args.use_depth:
+                    depth_img = tf.gather_nd(depth_img, select_inds)
+                    batch_rays = tf.stack([rays_o, rays_d, depth_img[...,:3]], 0)
+                else : 
+                    batch_rays = tf.stack([rays_o, rays_d], 0)
+                
                 target_s = tf.gather_nd(target, select_inds)
 
         #####  Core optimization loop  #####
@@ -807,9 +849,11 @@ def train():
         with tf.GradientTape() as tape:
 
             # Make predictions for color, disparity, accumulated opacity.
+            if batch_rays is None :
+                print("batch_rays is none!!!")
             rgb, disp, acc, extras = render(
                 H, W, focal, chunk=args.chunk, rays=batch_rays,
-                verbose=i < 10, retraw=True, **render_kwargs_train)
+                verbose=i < 10, retraw=True, depth_img=True, **render_kwargs_train)
 
             # Compute MSE loss between predicted and true RGB.
             img_loss = img2mse(rgb, target_s)
@@ -867,8 +911,10 @@ def train():
                 basedir, expname, 'testset_{:06d}'.format(i))
             os.makedirs(testsavedir, exist_ok=True)
             print('test poses shape', poses[i_test].shape)
+            print("i_test", i_test)
+
             render_path(poses[i_test], hwf, args.chunk, render_kwargs_test,
-                        gt_imgs=images[i_test], savedir=testsavedir)
+                        gt_imgs=images[i_test], savedir=testsavedir, depth=depth_imgs[i_test-13])
             print('Saved test set')
 
         if i % args.i_print == 0 or i < 10:
