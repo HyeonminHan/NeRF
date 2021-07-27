@@ -12,6 +12,8 @@ from run_nerf_helpers import *
 from load_llff import load_llff_data
 from load_deepvoxels import load_dv_data
 from load_blender import load_blender_data
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 
 
 tf.compat.v1.enable_eager_execution()
@@ -208,6 +210,27 @@ def render_rays(ray_batch,
     # Points in space to evaluate model at.
     pts = rays_o[..., None, :] + rays_d[..., None, :] * \
         z_vals[..., :, None]  # [N_rays, N_samples, 3]
+
+    #global xs, ys, zs
+#
+    #xs = tf.concat([xs,tf.reshape(pts[...,0,0], [-1])], 0) # 가장 가까운 sample 점만 추출 (1024, )
+    #ys = tf.concat([ys,tf.reshape(pts[...,0,1], [-1])], 0)
+    #zs = tf.concat([zs,tf.reshape(pts[...,0,2], [-1])], 0)
+    ## ys = tf.reshape(pts[...,0,1], [-1])
+    ## zs = tf.reshape(pts[...,0,2], [-1])
+    #print("pts[...,0]", len(xs))
+
+
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111, projection='3d')
+    # ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
+
+    # ax.set_xlabel('X Label')
+    # ax.set_ylabel('Y Label')
+    # ax.set_zlabel('Z Label')
+
+    # plt.show()
+
     # print("pts", pts)
     # Evaluate model at each point.
     raw = network_query_fn(pts, viewdirs, network_fn)  # [N_rays, N_samples, 4]
@@ -293,7 +316,7 @@ def render(H, W, focal,
     """
     if c2w is not None:
         # special case to render full image
-       rays_o, rays_d, depth = get_rays(H, W, focal, c2w, depth_img=depth_img)
+        rays_o, rays_d, depth = get_rays(H, W, focal, c2w, depth_img=depth_img)
     else:
         # use provided ray batch
         if depth_img is not None:
@@ -329,12 +352,48 @@ def render(H, W, focal,
     
     if depth_img is not None:
         alpha = 0.05
-        depth = tf.reshape(depth[..., 0], [-1,1]) * 6.0
+        depth = tf.reshape(depth[..., 0], [-1,1]) * 4.0 + 2.0#* 6.0 #
         near = depth - alpha
         far = depth + alpha
+        ####################################
+
+        print("rays_o", rays_o)
+        print("rays_d", rays_d)
+        print("depth", depth)
+
+        pts = rays_o[..., None, :] + rays_d[..., None, :] * \
+        depth[..., :, None]  # [N_rays, N_samples, 3]
+
+        global xs, ys, zs
+
+        xs = tf.concat([xs,tf.reshape(pts[...,0], [-1])], 0) 
+        ys = tf.concat([ys,tf.reshape(pts[...,1], [-1])], 0)
+        zs = tf.concat([zs,tf.reshape(pts[...,2], [-1])], 0)
+
+        print("pts", pts)
+        print("xs", xs)
+        print("ys", ys)
+        print("zs", zs)
+        # ys = tf.reshape(pts[...,0,1], [-1])
+        # zs = tf.reshape(pts[...,0,2], [-1])
+        print("pts[...,0]", len(xs)) 
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
+
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+        ax.set_xlim([-2,1])
+        ax.set_ylim([-1,4])
+        ax.set_zlim([-0.5,3])
+
+        plt.show()
+
     else : 
        near, far = near * \
            tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
+
 
     # (ray origin, ray direction, min dist, max dist) for each ray
     rays = tf.concat([rays_o, rays_d, near, far], axis=-1)
@@ -389,6 +448,17 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
             rgb8 = to8b(rgbs[-1])
             filename = os.path.join(savedir, '{:03d}.png'.format(i))
             imageio.imwrite(filename, rgb8)
+
+        global xs, ys, zs
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
+
+        ax.set_xlabel('X Label')
+        ax.set_ylabel('Y Label')
+        ax.set_zlabel('Z Label')
+
+        plt.show()
 
     rgbs = np.stack(rgbs, 0)
     disps = np.stack(disps, 0)
@@ -595,6 +665,10 @@ def config_parser():
 
     return parser
 
+
+xs=[]
+ys=[]
+zs=[]
 
 def train():
 
@@ -913,8 +987,17 @@ def train():
             print('test poses shape', poses[i_test].shape)
             print("i_test", i_test)
 
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+
+            n = 100
+
+            # For each set of style and range settings, plot n random points in the box
+            # defined by x in [23, 32], y in [0, 100], z in [zlow, zhigh].
+            #for c, m, zlow, zhigh in [('r', 'o', -50, -25), ('b', '^', -30, -5)]:
             render_path(poses[i_test], hwf, args.chunk, render_kwargs_test,
                         gt_imgs=images[i_test], savedir=testsavedir, depth=depth_imgs[i_test-13])
+                        
             print('Saved test set')
 
         if i % args.i_print == 0 or i < 10:
