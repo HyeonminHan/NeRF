@@ -352,7 +352,7 @@ def render(H, W, focal,
     
     if depth_img is not None:
         alpha = 0.05
-        depth = tf.reshape(depth[..., 0], [-1,1]) * 4.0 + 2.0#* 6.0 #
+        depth = (1. - tf.reshape(depth[..., 0], [-1,1])) * 8.0 #* 4.0 + 2.0 #* 6.0 
         near = depth - alpha
         far = depth + alpha
         ####################################
@@ -379,14 +379,19 @@ def render(H, W, focal,
         print("pts[...,0]", len(xs)) 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
+
+
+    #viewdirs = ray_batch[:, -3:] if ray_batch.shape[-1] > 8 else None
+       # xs_trash = xs[]
+
         ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
 
         ax.set_xlabel('X Label')
         ax.set_ylabel('Y Label')
         ax.set_zlabel('Z Label')
-        ax.set_xlim([-2,1])
-        ax.set_ylim([-1,4])
-        ax.set_zlim([-0.5,3])
+        #ax.set_xlim([-2,1])
+        #ax.set_ylim([-1,4])
+        #ax.set_zlim([-0.5,3])
 
         plt.show()
 
