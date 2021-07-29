@@ -328,8 +328,8 @@ def render(H, W, focal,
     
     
     if depth_img is not None:
-        alpha = 0.05
-        depth = tf.reshape(depth[..., 0], [-1,1]) * 6.0
+        alpha = 4
+        depth = (1. - tf.reshape(depth[..., 0], [-1,1])) * 8.0 #tf.reshape(depth[..., 0], [-1,1]) * 6.0
         near = depth - alpha
         far = depth + alpha
     else : 
