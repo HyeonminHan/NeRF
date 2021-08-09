@@ -123,24 +123,20 @@ def init_nerf_model(D=8, W=256, input_ch=3, input_ch_views=3, output_ch=4, skips
 def get_rays(H, W, focal, c2w, depth_img=None):
     """Get ray origins, directions from a pinhole camera."""
     
+    # if depth_img is not None :
+    #     j, i = np.where(depth_img[...,0]>0)
+    #     print("i==:", (i-W*.5)/focal)
+    #     print("W==:", W)
+    #     dirs = tf.stack([(i-W*.5)/focal, -(j-H*.5)/focal, -tf.ones_like(i)], -1)
+    # else :    
     i, j = tf.meshgrid(tf.range(W, dtype=tf.float32),
-                       tf.range(H, dtype=tf.float32), indexing='xy')
-    # print("i:", i)
-    # print("j:", j)
-    # print("j:", j.shape)
-    dirs = tf.stack([(i-W*.5)/focal, -(j-H*.5)/focal, -tf.ones_like(i)], -1)
-    
-    # print("dirs:", dirs)
-    # print("dirs:", dirs.shape)
-    rays_d = tf.reduce_sum(dirs[..., np.newaxis, :] * c2w[:3, :3], -1)
-    rays_o = tf.broadcast_to(c2w[:3, -1], tf.shape(rays_d))
+                       tf.range(H, dtype=tf.float32), indexing='xy')  # i (W, H)
+    dirs = tf.stack([(i-W*.5)/focal, -(j-H*.5) /
+                     focal, -tf.ones_like(i)], -1)
+    rays_d = tf.reduce_sum(dirs[..., np.newaxis, :] * c2w[:3, :3], -1) # (W, H, 3)
+    rays_o = tf.broadcast_to(c2w[:3, -1], tf.shape(rays_d))# (W, H, 3)
     
     return rays_o, rays_d, depth_img  
-
-    # print("rays_d:", rays_d.shape)
-    # print("rays_o:", rays_o.shape)
-
-    
 
 def get_rays_np(H, W, focal, c2w):
     """Get ray origins, directions from a pinhole camera."""

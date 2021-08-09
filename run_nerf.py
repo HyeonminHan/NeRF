@@ -175,27 +175,28 @@ def render_rays(ray_batch,
     # Extract lower, upper bound for ray distance.
     bounds = tf.reshape(ray_batch[..., 6:8], [-1, 1, 2])
     near, far = bounds[..., 0], bounds[..., 1]  # [-1,1]
-    # print("near in render_rays:", near)
-    # print("far in render_rays:", far)
     # Decide where to sample along each ray. Under the logic, all rays will be sampled at
     # the same times.
     t_vals = tf.linspace(0., 1., N_samples)
 
-    # print("t_vals: ", t_vals)
+    near2 = tf.fill(near.shape, 2.)
+    far2 = tf.fill(far.shape, 6.)
+
     # near - 2.0, far - 6.0
     if not lindisp: ###here -lego
         # Space integration times linearly between 'near' and 'far'. Same
         # integration points will be used for all rays.
         z_vals = near * (1.-t_vals) + far * (t_vals)
+        z_vals2 = near2 * (1.-t_vals) + far2 * (t_vals)
     else:
         # Sample linearly in inverse depth (disparity).
         z_vals = 1./(1./near * (1.-t_vals) + 1./far * (t_vals))
 
     z_vals = tf.broadcast_to(z_vals, [N_rays, N_samples])
-    # print("z_vals in render_rays", z_vals)
+    z_vals2 = tf.broadcast_to(z_vals2, [N_rays, N_samples])
 
     # Perturb sampling time along each ray.
-    if perturb > 0.: #default lego
+    if perturb > 0.:  # default lego
         # get intervals between samples
         mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
         upper = tf.concat([mids, z_vals[..., -1:]], -1)
@@ -203,35 +204,75 @@ def render_rays(ray_batch,
         # stratified samples in those intervals
         t_rand = tf.random.uniform(z_vals.shape)
         z_vals = lower + (upper - lower) * t_rand
-    # print("rays_o2 in render_rays:", rays_o)
-    # print("rays_d2 in render_rays:", rays_d)
-    # print("z_vals2 in render_rays", z_vals)
+
+        mids2 = .5 * (z_vals2[..., 1:] + z_vals2[..., :-1])
+        upper2 = tf.concat([mids2, z_vals2[..., -1:]], -1)
+        lower2 = tf.concat([z_vals2[..., :1], mids2], -1)
+        # stratified samples in those intervals
+        t_rand2 = tf.random.uniform(z_vals2.shape)
+        z_vals2 = lower2 + (upper2 - lower2) * t_rand2
 
     # Points in space to evaluate model at.
     pts = rays_o[..., None, :] + rays_d[..., None, :] * \
         z_vals[..., :, None]  # [N_rays, N_samples, 3]
+    '''
+    pts2 = rays_o[..., None, :] + rays_d[..., None, :] * \
+        z_vals2[..., :, None]  # [N_rays, N_samples, 3]
+    
+    global xs, ys, zs, xs_2, ys_2, zs_2,xs_3, ys_3, zs_3, origin_x, origin_y, origin_z
+    global xs_,ys_, zs_, xs_3_,ys_3_, zs_3_
+    # xs=[]
+    # ys=[]
+    # zs=[]
 
-    #global xs, ys, zs
-#
-    #xs = tf.concat([xs,tf.reshape(pts[...,0,0], [-1])], 0) # 가장 가까운 sample 점만 추출 (1024, )
-    #ys = tf.concat([ys,tf.reshape(pts[...,0,1], [-1])], 0)
-    #zs = tf.concat([zs,tf.reshape(pts[...,0,2], [-1])], 0)
-    ## ys = tf.reshape(pts[...,0,1], [-1])
-    ## zs = tf.reshape(pts[...,0,2], [-1])
-    #print("pts[...,0]", len(xs))
+    xs = tf.concat([xs, tf.reshape(pts[..., 0], [-1])], 0)
+    ys = tf.concat([ys, tf.reshape(pts[..., 1], [-1])], 0)
+    zs = tf.concat([zs, tf.reshape(pts[..., 2], [-1])], 0)
+
+    xs_2 = tf.concat([xs_2, tf.reshape(pts[...,int(N_samples/2), 0], [-1])], 0)
+    ys_2 = tf.concat([ys_2, tf.reshape(pts[...,int(N_samples/2), 1], [-1])], 0)
+    zs_2 = tf.concat([zs_2, tf.reshape(pts[...,int(N_samples/2), 2], [-1])], 0)
+
+    xs_3 = tf.concat([xs_3, tf.reshape(pts[...,-1, 0], [-1])], 0)
+    ys_3 = tf.concat([ys_3, tf.reshape(pts[...,-1, 1], [-1])], 0)
+    zs_3 = tf.concat([zs_3, tf.reshape(pts[...,-1, 2], [-1])], 0)
+
+    xs_ = tf.concat([xs_, tf.reshape(pts2[..., 0], [-1])], 0)
+    ys_ = tf.concat([ys_, tf.reshape(pts2[..., 1], [-1])], 0)
+    zs_ = tf.concat([zs_, tf.reshape(pts2[..., 2], [-1])], 0)
+
+    # xs_3_ = tf.concat([xs_3_, tf.reshape(pts2[...,-1, 0], [-1])], 0)
+    # ys_3_ = tf.concat([ys_3_, tf.reshape(pts2[...,-1, 1], [-1])], 0)
+    # zs_3_ = tf.concat([zs_3_, tf.reshape(pts2[...,-1, 2], [-1])], 0)
+
+    origin_x = tf.concat([origin_x, tf.reshape(rays_o[0][0], [-1])], 0)
+    origin_y = tf.concat([origin_y, tf.reshape(rays_o[0][1], [-1])], 0)
+    origin_z = tf.concat([origin_z, tf.reshape(rays_o[0][2], [-1])], 0)
 
 
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
 
-    # ax.set_xlabel('X Label')
-    # ax.set_ylabel('Y Label')
-    # ax.set_zlabel('Z Label')
+    # ax.scatter(xs_b, ys_b, zs_b, c='r', marker='o', s=[0.1 for x in range(xs_b.shape[0])])
+    ax.scatter(xs, ys, zs, c='y', marker='o', s=[
+               0.1 for x in range(xs.shape[0])])
+    ax.scatter(xs_2, ys_2, zs_2, c='b', marker='o', s=[
+        0.1 for x in range(xs_2.shape[0])])
+    # ax.scatter(xs_3, ys_3, zs_3, c='y', marker='o', s=[
+        # 0.1 for x in range(xs.shape[0])])
+    ax.scatter(xs_, ys_, zs_, c='g', marker='o', s=[
+        0.1 for x in range(xs_.shape[0])])
+    # ax.scatter(xs_3_, ys_3_, zs_3_, c='g', marker='o', s=[
+        # 0.1 for x in range(xs.shape[0])])
+    ax.scatter(origin_x, origin_y, origin_z, c='r', marker='o', s=[3.0])
 
-    # plt.show()
+    ax.set_xlabel('X Label')
+    ax.set_ylabel('Y Label')
+    ax.set_zlabel('Z Label')
 
-    # print("pts", pts)
+    plt.show()
+    '''
+    
     # Evaluate model at each point.
     raw = network_query_fn(pts, viewdirs, network_fn)  # [N_rays, N_samples, 4]
     rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(
@@ -322,7 +363,7 @@ def render(H, W, focal,
         if depth_img is not None:
             rays_o, rays_d, depth = rays
         else :
-           rays_o, rays_d = rays
+            rays_o, rays_d = rays
 
     if use_viewdirs:
         # provide ray directions as input
@@ -331,7 +372,7 @@ def render(H, W, focal,
 
         if c2w_staticcam is not None:
             # special case to visualize effect of viewdirs
-            rays_o, rays_d = get_rays(H, W, focal, c2w_staticcam)
+            rays_o, rays_d, depth = get_rays(H, W, focal, c2w_staticcam, depth_img=depth_img)
             print("c2w_staticcam")
 
         # Make all directions unit magnitude.
@@ -346,45 +387,100 @@ def render(H, W, focal,
             H, W, focal, tf.cast(1., tf.float32), rays_o, rays_d)
 
     # Create ray batch
-    rays_o = tf.cast(tf.reshape(rays_o, [-1, 3]), dtype=tf.float32)
-    rays_d = tf.cast(tf.reshape(rays_d, [-1, 3]), dtype=tf.float32)
+    rays_o = tf.cast(tf.reshape(rays_o, [-1, 3]), dtype=tf.float32) #[ray batch, 3]
+    rays_d = tf.cast(tf.reshape(rays_d, [-1, 3]), dtype=tf.float32) #[ray batch, 3]
     
-    
+    #if depth_img is not None:
+    #    rays_o = rays_o[depth[...,0]>0]
+    #    rays_d = rays_d[depth[...,0]>0]
+
     if depth_img is not None:
-        alpha = 0.05
-        depth = (1. - tf.reshape(depth[..., 0], [-1,1])) * 8.0 #* 4.0 + 2.0 #* 6.0 
+        alpha = 2.
+        depth = (1. - tf.reshape(depth[...,0], [-1,1])) * 8.0 #* 4.0 + 2.0 #* 6.0 
+        
         near = depth - alpha
         far = depth + alpha
         ####################################
-
+        # rays_o [N_rays,3]
+        # rays_d [N_rays,3]
+        # depth [N_rays,1]
+        
+        '''
         print("rays_o", rays_o)
         print("rays_d", rays_d)
         print("depth", depth)
 
+        flag_foregd = depth < 8
+        flag_backgd = depth >= 8
+
+        fore_mask = np.column_stack([flag_foregd,flag_foregd,flag_foregd])
+        back_mask = np.column_stack([flag_backgd,flag_backgd,flag_backgd])
+
+        pts_f = np.reshape(rays_o[fore_mask],(-1,3))[..., None, :] + np.reshape(rays_d[fore_mask],(-1,3))[..., None, :] * \
+            depth[flag_foregd][..., None, None]  # [N_rays, N_samples, 3] -> using depth [N_rays, N_samples=1, 3]
+
+        pts_b = np.reshape(rays_o[back_mask],(-1,3))[..., None, :] + np.reshape(rays_d[back_mask],(-1,3))[..., None, :] * \
+            depth[flag_backgd][..., None, None]  # [N_rays, N_samples, 3] -> using depth [N_rays, N_samples=1, 3]
+
+        print("pts_b", pts_b.shape)
+        # np.set_printoptions(threshold=sys.maxsize)
         pts = rays_o[..., None, :] + rays_d[..., None, :] * \
-        depth[..., :, None]  # [N_rays, N_samples, 3]
+        depth[..., :, None]
 
-        global xs, ys, zs
+        global xs, ys, zs, origin_x, origin_y, origin_z
+        # xs=[]
+        # ys=[]
+        # zs=[]
 
-        xs = tf.concat([xs,tf.reshape(pts[...,0], [-1])], 0) 
-        ys = tf.concat([ys,tf.reshape(pts[...,1], [-1])], 0)
-        zs = tf.concat([zs,tf.reshape(pts[...,2], [-1])], 0)
+        xs = tf.concat([xs,tf.reshape(pts_f[...,0], [-1])], 0) 
+        ys = tf.concat([ys,tf.reshape(pts_f[...,1], [-1])], 0)
+        zs = tf.concat([zs,tf.reshape(pts_f[...,2], [-1])], 0)
 
-        print("pts", pts)
-        print("xs", xs)
-        print("ys", ys)
-        print("zs", zs)
-        # ys = tf.reshape(pts[...,0,1], [-1])
-        # zs = tf.reshape(pts[...,0,2], [-1])
-        print("pts[...,0]", len(xs)) 
+
+        origin_x = tf.concat([origin_x,tf.reshape(rays_o[0][0], [-1])], 0)
+        origin_y = tf.concat([origin_y,tf.reshape(rays_o[0][1], [-1])], 0)
+        origin_z = tf.concat([origin_z,tf.reshape(rays_o[0][2], [-1])], 0)
+
+        xs_b = tf.reshape(pts_b[...,0], [-1]) 
+        ys_b = tf.reshape(pts_b[...,1], [-1])
+        zs_b = tf.reshape(pts_b[...,2], [-1])
+        
+
+        print("len(xs)", len(xs)) 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
+        print("len(xs_b)", len(xs_b)) 
 
+        near_ = rays_o[..., None, :] + rays_d[..., None, :] * 2.
+        far_ = rays_o[..., None, :] + rays_d[..., None, :] * 6.
 
-    #viewdirs = ray_batch[:, -3:] if ray_batch.shape[-1] > 8 else None
-       # xs_trash = xs[]
+        pts_f_n = np.reshape(rays_o[fore_mask],(-1,3))[..., None, :] + np.reshape(rays_d[fore_mask],(-1,3))[..., None, :] * \
+            near[flag_foregd][..., None, None]  # [N_rays, N_samples, 3] -> using depth [N_rays, N_samples=1, 3]
 
+        pts_f_f = np.reshape(rays_o[fore_mask],(-1,3))[..., None, :] + np.reshape(rays_d[fore_mask],(-1,3))[..., None, :] * \
+            far[flag_foregd][..., None, None]  # [N_rays, N_samples, 3] -> using depth [N_rays, N_samples=1, 3]
+
+        xs_temp_n = tf.reshape(near_[...,0], [-1]) 
+        ys_temp_n = tf.reshape(near_[...,1], [-1])
+        zs_temp_n = tf.reshape(near_[...,2], [-1])
+        xs_temp_f = tf.reshape(far_[...,0], [-1]) 
+        ys_temp_f = tf.reshape(far_[...,1], [-1])
+        zs_temp_f = tf.reshape(far_[...,2], [-1])
+
+        xs_f_n = tf.reshape(pts_f_n[...,0], [-1]) 
+        ys_f_n = tf.reshape(pts_f_n[...,1], [-1])
+        zs_f_n = tf.reshape(pts_f_n[...,2], [-1])
+        xs_f_f = tf.reshape(pts_f_f[...,0], [-1]) 
+        ys_f_f = tf.reshape(pts_f_f[...,1], [-1])
+        zs_f_f = tf.reshape(pts_f_f[...,2], [-1])
+
+        # ax.scatter(xs_b, ys_b, zs_b, c='r', marker='o', s=[0.1 for x in range(xs_b.shape[0])])
         ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
+        ax.scatter(origin_x, origin_y, origin_z, c='r', marker='o', s=[3.0])
+        ax.scatter(xs_temp_n, ys_temp_n, zs_temp_n, c='g', marker='o', s=[0.1 for x in range(xs_temp_n.shape[0])])
+        ax.scatter(xs_temp_f, ys_temp_f, zs_temp_f, c='g', marker='o', s=[0.1 for x in range(xs_temp_f.shape[0])])
+        ax.scatter(xs_f_n, ys_f_n, zs_f_n, c='y', marker='o', s=[0.1 for x in range(xs_f_n.shape[0])])
+        ax.scatter(xs_f_f, ys_f_f, zs_f_f, c='y', marker='o', s=[0.1 for x in range(xs_f_f.shape[0])])
 
         ax.set_xlabel('X Label')
         ax.set_ylabel('Y Label')
@@ -394,30 +490,35 @@ def render(H, W, focal,
         #ax.set_zlim([-0.5,3])
 
         plt.show()
+        return None, None, None, None
+        '''
 
     else : 
        near, far = near * \
            tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
 
+    # np.set_printoptions(threshold=np.inf, linewidth=np.inf)
+    # print("nea:", near)
+    # print("far:", far)
 
     # (ray origin, ray direction, min dist, max dist) for each ray
     rays = tf.concat([rays_o, rays_d, near, far], axis=-1)
     if use_viewdirs:
         # (ray origin, ray direction, min dist, max dist, normalized viewing direction)
         rays = tf.concat([rays, viewdirs], axis=-1)
-
     # Render and reshape
     all_ret = batchify_rays(rays, chunk, **kwargs)
     for k in all_ret:
         k_sh = list(sh[:-1]) + list(all_ret[k].shape[1:])
         all_ret[k] = tf.reshape(all_ret[k], k_sh)
+        
 
     k_extract = ['rgb_map', 'disp_map', 'acc_map']
     ret_list = [all_ret[k] for k in k_extract]
     ret_dict = {k: all_ret[k] for k in all_ret if k not in k_extract}
     return ret_list + [ret_dict]
 
-def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0, depth=None):
+def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=None, render_factor=0, depth_imgs=None):
 
     H, W, focal = hwf
 
@@ -429,46 +530,52 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
 
     rgbs = []
     disps = []
+    losses = []
+    psnrs = []
 
     t = time.time()
     for i, c2w in enumerate(render_poses):
-        print(i, time.time() - t)
+        print("i :", i, "time:", time.time() - t)
         t = time.time()
-        if depth is not None:
+        if depth_imgs is not None:
             rgb, disp, acc, _ = render(
-            H, W, focal, chunk=chunk, c2w=c2w[:3, :4], depth_img=depth[i], **render_kwargs)
+            H, W, focal, chunk=chunk, c2w=c2w[:3, :4], depth_img=depth_imgs[i], **render_kwargs)
+            depth = depth_imgs[i][...,:3]
+            rgb = tf.where(depth > 0, rgb, tf.ones(depth.shape))
         else : 
             rgb, disp, acc, _ = render(
             H, W, focal, chunk=chunk, c2w=c2w[:3, :4], **render_kwargs)
+        
         rgbs.append(rgb.numpy())
         disps.append(disp.numpy())
         if i == 0:
             print(rgb.shape, disp.shape)
 
         if gt_imgs is not None and render_factor == 0:
-            p = -10. * np.log10(np.mean(np.square(rgb - gt_imgs[i])))
-            print(p)
+            
+            if depth_imgs is not None :
+                l = np.mean(np.square(rgb[depth>0] - gt_imgs[i][depth>0]))
+                p = -10. * np.log10(l)
+
+            else : 
+                l = np.mean(np.square(rgb - gt_imgs[i]))
+                p = -10. * np.log10(l)
+
+            print("loss : ", l)
+            print("psnr : ", p)
+            losses.append(l)
+            psnrs.append(p)
 
         if savedir is not None:
             rgb8 = to8b(rgbs[-1])
             filename = os.path.join(savedir, '{:03d}.png'.format(i))
             imageio.imwrite(filename, rgb8)
 
-        global xs, ys, zs
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(xs, ys, zs, c='b', marker='o', s=[0.1 for x in range(xs.shape[0])])
-
-        ax.set_xlabel('X Label')
-        ax.set_ylabel('Y Label')
-        ax.set_zlabel('Z Label')
-
-        plt.show()
 
     rgbs = np.stack(rgbs, 0)
     disps = np.stack(disps, 0)
 
-    return rgbs, disps
+    return rgbs, disps, losses, psnrs
 
 def create_nerf(args):
     """Instantiate NeRF's MLP model."""
@@ -560,7 +667,7 @@ def config_parser():
     parser.add_argument('--config', is_config_file=True,
                         help='config file path')
     parser.add_argument("--expname", type=str, help='experiment name')
-    parser.add_argument("--basedir", type=str, default='./logs/',
+    parser.add_argument("--basedir", type=str, default='/media/hyunmin/FED62A69D62A21FF/nerf/logs/',
                         help='where to store ckpts and logs')
     parser.add_argument("--datadir", type=str,
                         default='./data/llff/fern', help='input data directory')
@@ -631,7 +738,7 @@ def config_parser():
     # dataset options
     parser.add_argument("--dataset_type", type=str, default='llff',
                         help='options: llff / blender / deepvoxels')
-    parser.add_argument("--testskip", type=int, default=8,
+    parser.add_argument("--testskip", type=int, default=1,
                         help='will load 1/N images from test/val sets, useful for large datasets like deepvoxels')
 
     # deepvoxels flags
@@ -674,6 +781,25 @@ def config_parser():
 xs=[]
 ys=[]
 zs=[]
+xs_2=[]
+ys_2=[]
+zs_2=[]
+xs_3=[]
+ys_3=[]
+zs_3=[]
+xs_=[]
+ys_=[]
+zs_=[]
+xs_2_=[]
+ys_2_=[]
+zs_2_=[]
+xs_3_=[]
+ys_3_=[]
+zs_3_=[]
+
+origin_x=[]
+origin_y=[]
+origin_z=[]
 
 def train():
 
@@ -686,7 +812,6 @@ def train():
         tf.compat.v1.set_random_seed(args.random_seed)
 
     # Load data
-
     if args.dataset_type == 'llff':
         images, poses, bds, render_poses, i_test = load_llff_data(args.datadir, args.factor,
                                                                   recenter=True, bd_factor=.75,
@@ -716,7 +841,6 @@ def train():
         print('NEAR FAR', near, far)
 
     elif args.dataset_type == 'blender':
-
         if args.use_depth : 
             images, poses, render_poses, hwf, i_split, depth_imgs = load_blender_data(
             args.datadir, args.half_res, args.testskip, args.use_depth)
@@ -729,11 +853,16 @@ def train():
 
         near = 2.
         far = 6.
-
         if args.white_bkgd:
             images = images[..., :3]*images[..., -1:] + (1.-images[..., -1:])
         else:
             images = images[..., :3]
+        if args.use_depth:
+            render_depths = np.array(depth_imgs[i_test])
+        else:
+            render_depths = None
+            
+        
 
     elif args.dataset_type == 'deepvoxels':
 
@@ -759,8 +888,11 @@ def train():
     hwf = [H, W, focal]
     print("=============focal:", focal)
 
+    print("#########i_test", i_test)
+
     if args.render_test:
         render_poses = np.array(poses[i_test])
+        print("render_poses", render_poses)
 
     # Create log dir and copy the config file
     basedir = args.basedir
@@ -793,17 +925,20 @@ def train():
         if args.render_test:
             # render_test switches to test poses
             images = images[i_test]
+            print("11")
         else:
             # Default is smoother render_poses path
             images = None
+            print("22")
+
 
         testsavedir = os.path.join(basedir, expname, 'renderonly_{}_{:06d}'.format(
             'test' if args.render_test else 'path', start))
         os.makedirs(testsavedir, exist_ok=True)
         print('test poses shape', render_poses.shape)
 
-        rgbs, _ = render_path(render_poses, hwf, args.chunk, render_kwargs_test,
-                              gt_imgs=images, savedir=testsavedir, render_factor=args.render_factor)
+        rgbs, _,_,_ = render_path(render_poses, hwf, args.chunk, render_kwargs_test,
+                              gt_imgs=images, savedir=testsavedir, render_factor=args.render_factor, depth_imgs=render_depths)
         print('Done rendering', testsavedir)
         imageio.mimwrite(os.path.join(testsavedir, 'video.mp4'),
                          to8b(rgbs), fps=30, quality=8)
@@ -863,8 +998,14 @@ def train():
         os.path.join(basedir, 'summaries', expname))
     writer.set_as_default()
 
+    iters_train=[]
+    losses_train=[]
+    psnrs_train=[]
+    losses_val=[]
+    psnrs_val=[]
     for i in range(start, N_iters):
         time0 = time.time()
+        depth_img = None
 
         # Sample random ray batch
 
@@ -889,8 +1030,9 @@ def train():
             img_i = np.random.choice(i_train)
             target = images[img_i]
             pose = poses[img_i, :3, :4]
-            if args.use_depth:
-                depth_img = depth_imgs[img_i]
+
+            # plt.imshow(target)
+            # plt.show()
 
             if N_rand is not None:
                 rays_o, rays_d, _ = get_rays(H, W, focal, pose)
@@ -903,22 +1045,28 @@ def train():
                         indexing='ij'), -1)
                     if i < 10:
                         print('precrop', dH, dW, coords[0,0], coords[-1,-1])
+                
+                elif args.use_depth:
+                    depth_img = depth_imgs[img_i] 
+                    ii, jj = np.where(depth_img[...,0]>0)
+                    coords = tf.stack([ii, jj], -1)
+                
                 else: ## lego default
                     coords = tf.stack(tf.meshgrid(
-                        tf.range(H), tf.range(W), indexing='ij'), -1)
-                coords = tf.reshape(coords, [-1, 2])
+                        tf.range(H), tf.range(W), indexing='ij'), -1) #[H, W, 2]
+                coords = tf.reshape(coords, [-1, 2]) # [HxW, 2]
+
                 select_inds = np.random.choice(
                     coords.shape[0], size=[N_rand], replace=False)
 
-                select_inds = tf.gather_nd(coords, select_inds[:, tf.newaxis])
+                select_inds = tf.gather_nd(coords, select_inds[:, tf.newaxis]) # [ray_batch , 2]
                 rays_o = tf.gather_nd(rays_o, select_inds)
                 rays_d = tf.gather_nd(rays_d, select_inds)
-
-                
                 if args.use_depth:
                     depth_img = tf.gather_nd(depth_img, select_inds)
+
                     batch_rays = tf.stack([rays_o, rays_d, depth_img[...,:3]], 0)
-                else : 
+                else :                
                     batch_rays = tf.stack([rays_o, rays_d], 0)
                 
                 target_s = tf.gather_nd(target, select_inds)
@@ -932,13 +1080,14 @@ def train():
                 print("batch_rays is none!!!")
             rgb, disp, acc, extras = render(
                 H, W, focal, chunk=args.chunk, rays=batch_rays,
-                verbose=i < 10, retraw=True, depth_img=True, **render_kwargs_train)
+                verbose=i < 10, retraw=True, depth_img=depth_img, **render_kwargs_train)
 
             # Compute MSE loss between predicted and true RGB.
             img_loss = img2mse(rgb, target_s)
             trans = extras['raw'][..., -1]
             loss = img_loss
             psnr = mse2psnr(img_loss)
+            loss_train = img_loss
 
             # Add MSE loss for coarse-grained model
             if 'rgb0' in extras:
@@ -967,7 +1116,7 @@ def train():
 
         if i % args.i_video == 0 and i > 0:
 
-            rgbs, disps = render_path(
+            rgbs, disps,_,_ = render_path(
                 render_poses, hwf, args.chunk, render_kwargs_test)
             print('Done, saving', rgbs.shape, disps.shape)
             moviebase = os.path.join(
@@ -979,7 +1128,7 @@ def train():
 
             if args.use_viewdirs:
                 render_kwargs_test['c2w_staticcam'] = render_poses[0][:3, :4]
-                rgbs_still, _ = render_path(
+                rgbs_still, _,_,_ = render_path(
                     render_poses, hwf, args.chunk, render_kwargs_test)
                 render_kwargs_test['c2w_staticcam'] = None
                 imageio.mimwrite(moviebase + 'rgb_still.mp4',
@@ -989,8 +1138,6 @@ def train():
             testsavedir = os.path.join(
                 basedir, expname, 'testset_{:06d}'.format(i))
             os.makedirs(testsavedir, exist_ok=True)
-            print('test poses shape', poses[i_test].shape)
-            print("i_test", i_test)
 
             fig = plt.figure()
             ax = fig.add_subplot(111, projection='3d')
@@ -1000,14 +1147,33 @@ def train():
             # For each set of style and range settings, plot n random points in the box
             # defined by x in [23, 32], y in [0, 100], z in [zlow, zhigh].
             #for c, m, zlow, zhigh in [('r', 'o', -50, -25), ('b', '^', -30, -5)]:
-            render_path(poses[i_test], hwf, args.chunk, render_kwargs_test,
-                        gt_imgs=images[i_test], savedir=testsavedir, depth=depth_imgs[i_test-13])
-                        
+
+            _,_, losses, psnrs = render_path(poses[i_test], hwf, args.chunk, render_kwargs_test,
+                        gt_imgs=images[i_test], savedir=testsavedir, depth_imgs=render_depths)
+            
+            avr_loss=0
+            avr_psnr=0
+            f = open(testsavedir+"/testlog_"+str(i)+".txt", "a")
+            for ii in range(len(i_test)):
+
+                f.write('iter: {} test_img_i: {} test_loss: {:.4f} test_psnr: {:.4f}\n'\
+                                    .format(i, i_test[ii],losses[ii],psnrs[ii]))
+
+                avr_loss += losses[ii]
+                avr_psnr += psnrs[ii]
+
+            avr_loss /= len(i_test)            
+            avr_psnr /= len(i_test)   
+            f.write('iter: {} avr_loss: {:.4f} avr_psnr: {:.4f}\n'\
+                                    .format(i, avr_loss,avr_psnr))
+            f.close()
+
+
             print('Saved test set')
 
         if i % args.i_print == 0 or i < 10:
 
-            print(expname, i, psnr.numpy(), loss.numpy(), global_step.numpy())
+            print(expname, i, psnr.numpy(), loss_train.numpy(), global_step.numpy())
             print('iter time {:.05f}'.format(dt))
             with tf.contrib.summary.record_summaries_every_n_global_steps(args.i_print):
                 tf.contrib.summary.scalar('loss', loss)
@@ -1015,25 +1181,80 @@ def train():
                 tf.contrib.summary.histogram('tran', trans)
                 if args.N_importance > 0:
                     tf.contrib.summary.scalar('psnr0', psnr0)
-
+            
             if i % args.i_img == 0:
 
                 # Log a rendered validation view to Tensorboard
-                img_i = np.random.choice(i_val)
-                target = images[img_i]
-                pose = poses[img_i, :3, :4]
+                img_val_i = np.random.choice(i_val)
+                target = images[img_val_i]
+                pose = poses[img_val_i, :3, :4]
 
-                rgb, disp, acc, extras = render(H, W, focal, chunk=args.chunk, c2w=pose,
+                if args.use_depth:
+                    rgb, disp, acc, extras = render(
+                        H, W, focal, chunk=args.chunk, c2w=pose, depth_img=depth_imgs[img_val_i], **render_kwargs_test)
+                    depth = depth_imgs[img_val_i][...,:3]
+                    rgb = tf.where(depth > 0, rgb, tf.ones(depth.shape))
+                    loss_val = np.mean(np.square(rgb[depth>0] - target[depth>0]))
+                    psnr_val = -10. * np.log10(loss_val)
+
+                else:
+                    rgb, disp, acc, extras = render(H, W, focal, chunk=args.chunk, c2w=pose,
                                                 **render_kwargs_test)
+                    loss_val = img2mse(rgb, target)
+                    psnr_val = mse2psnr(loss_val)
 
-                psnr = mse2psnr(img2mse(rgb, target))
+                print("train loss:", loss)
+                print("train loss_train:", loss_train)
+                print("train psnr:", psnr)
+                print("val loss:", loss_val)
+                print("val psnr:", psnr_val)
                 
                 # Save out the validation image for Tensorboard-free monitoring
                 testimgdir = os.path.join(basedir, expname, 'tboard_val_imgs')
-                if i==0:
-                    os.makedirs(testimgdir, exist_ok=True)
+                os.makedirs(testimgdir, exist_ok=True)
                 imageio.imwrite(os.path.join(testimgdir, '{:06d}.png'.format(i)), to8b(rgb))
 
+                iters_train.append(i)
+                losses_train.append(loss_train)
+                psnrs_train.append(psnr)
+                losses_val.append(loss_val)
+                psnrs_val.append(psnr_val)
+
+                interval_train = range(len(iters_train))
+
+                plotimgdir = os.path.join(basedir, expname, 'plot_imgs')
+                os.makedirs(plotimgdir, exist_ok=True)
+
+                plt.figure(1, figsize=(10, 5))
+                plt.title("Training Loss")
+                line1, = plt.plot(losses_train, 'b', label="train")
+                line2, = plt.plot(losses_val, 'r', label="val")
+                plt.xticks(interval_train, iters_train)
+                plt.ylim([0., 0.08])
+                plt.xlabel("Iteration")
+                plt.ylabel("Loss")
+                plt.legend(handles=(line1, line2),bbox_to_anchor=(1, 1.15), ncol=2)
+                plt.savefig(plotimgdir+'/loss_'+str(i)+'.png')
+
+                plt.figure(2, figsize=(10, 5))
+                plt.title("Training psnr")
+                line1, = plt.plot(psnrs_train, 'b', label="train")
+                line2, = plt.plot(psnrs_val, 'r', label="val")
+                plt.xticks(interval_train, iters_train)
+                plt.ylim([10, 33])
+                plt.xlabel("Iteration")
+                plt.ylabel("PSNR")
+                plt.legend(handles=(line1, line2),bbox_to_anchor=(1, 1.15), ncol=2)
+                plt.savefig(plotimgdir+'/psnr_'+str(i)+'.png')
+                #plt.show()
+
+                f = open(plotimgdir+"/train_val_log.txt", "a")
+                f.write('iter: {} train_img_i: {} train_loss: {:.4f} train_psnr: {:.4f} \
+                                  val_img_i: {} val_loss: {:.4f} val_psnr: {:.4f}\n'\
+                                    .format(i, img_i,loss_train.numpy(),psnr.numpy(),\
+                                               img_val_i, loss_val, psnr_val))
+
+                f.close()
                 with tf.contrib.summary.record_summaries_every_n_global_steps(args.i_img):
 
                     tf.contrib.summary.image('rgb', to8b(rgb)[tf.newaxis])
@@ -1042,7 +1263,7 @@ def train():
                     tf.contrib.summary.image(
                         'acc', acc[tf.newaxis, ..., tf.newaxis])
 
-                    tf.contrib.summary.scalar('psnr_holdout', psnr)
+                    tf.contrib.summary.scalar('psnr_holdout', psnr_val)
                     tf.contrib.summary.image('rgb_holdout', target[tf.newaxis])
 
                 if args.N_importance > 0:

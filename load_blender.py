@@ -61,25 +61,17 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
             fname = os.path.join(basedir, frame['file_path'] + '.png')
             imgs.append(imageio.imread(fname))
             poses.append(np.array(frame['transform_matrix']))
-            if use_depth and (s == 'train' or s== 'test'):
+            if use_depth :
                 fname_ = fname.split("/")
-                fname_d = '/'.join(fname_[:-1])+'/'+fname_[-1][:-4] + "_depth_0001.png"
+                fname_d = '/'.join(fname_[:-1]) + '/' + fname_[-1][:-4] + "_depth_0001.png"
                 depth_imgs.append(imageio.imread(fname_d))
-                # d_img = imageio.imread(fname_d)
-                #print(d_img)
-                # np.set_printoptions(threshold=np.inf, linewidth=np.inf)
-                # temp = d_img[d_img[...,3] !=0]
-                # print(temp.min())
-                # print(d_img[...,3].max())
-                # print("yes" if d_img[...,0].all() == d_img[...,1].all() else "no")
-
 
         imgs = (np.array(imgs) / 255.).astype(np.float32) # keep all 4 channels (RGBA)
         poses = np.array(poses).astype(np.float32)
         counts.append(counts[-1] + imgs.shape[0])
         all_imgs.append(imgs)
         all_poses.append(poses)
-        if use_depth and (s == 'train' or s== 'test'):
+        if use_depth :
             depth_imgs = (np.array(depth_imgs) / 255.).astype(np.float32) 
             all_depths.append(depth_imgs)
 
@@ -104,8 +96,11 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
         H = H//2
         W = W//2
         focal = focal/2.
-    print("imgs", imgs.shape)
-    print("imgs", depth_imgs.shape)
+    # print("imgs", imgs.shape)
+    # print("imgs", depth_imgs.shape)
+    # print("i_split", i_split)
+
+    import matplotlib.pyplot as plt
 
     if use_depth:
         return imgs, poses, render_poses, [H, W, focal], i_split, depth_imgs
