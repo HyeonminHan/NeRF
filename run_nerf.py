@@ -395,14 +395,9 @@ def render(H, W, focal,
     #    rays_d = rays_d[depth[...,0]>0]
 
     if depth_img is not None:
-<<<<<<< HEAD
-        alpha = 4
-        depth = (1. - tf.reshape(depth[..., 0], [-1,1])) * 8.0 #tf.reshape(depth[..., 0], [-1,1]) * 6.0
-=======
-        alpha = 2.
+        alpha = 1.
         depth = (1. - tf.reshape(depth[...,0], [-1,1])) * 8.0 #* 4.0 + 2.0 #* 6.0 
         
->>>>>>> debug
         near = depth - alpha
         far = depth + alpha
         ####################################
@@ -769,15 +764,15 @@ def config_parser():
                         help='will take every 1/N images as LLFF test set, paper uses 8')
 
     # logging/saving options
-    parser.add_argument("--i_print",   type=int, default=100,
+    parser.add_argument("--i_print",   type=int, default=1000,
                         help='frequency of console printout and metric loggin')
-    parser.add_argument("--i_img",     type=int, default=500,
+    parser.add_argument("--i_img",     type=int, default=1000,
                         help='frequency of tensorboard image logging')
     parser.add_argument("--i_weights", type=int, default=10000,
                         help='frequency of weight ckpt saving')
     parser.add_argument("--i_testset", type=int, default=50000,
                         help='frequency of testset saving')
-    parser.add_argument("--i_video",   type=int, default=50000,
+    parser.add_argument("--i_video",   type=int, default=10000000,
                         help='frequency of render_poses video saving')
 
     return parser
@@ -866,6 +861,7 @@ def train():
             render_depths = np.array(depth_imgs[i_test])
         else:
             render_depths = None
+        
             
         
 
@@ -916,6 +912,24 @@ def train():
     # Create nerf model
     render_kwargs_train, render_kwargs_test, start, grad_vars, models = create_nerf(
         args)
+    
+    iters_train=[]
+    losses_train=[]
+    psnrs_train=[]
+    losses_val=[]
+    psnrs_val=[]
+    
+    if start > 0:
+        plotimgdir = os.path.join(basedir, expname, 'plot_imgs')
+        with open(plotimgdir+"/train_val_log.txt",'r') as f:
+            lines = f.readlines()
+            for l in lines:
+                x = l.split()
+                iters_train.append(int(x[1]))
+                losses_train.append(float(x[5]))
+                psnrs_train.append(float(x[7]))
+                losses_val.append(float(x[11]))
+                psnrs_val.append(float(x[13]))
 
     bds_dict = {
         'near': tf.cast(near, tf.float32),
@@ -1003,11 +1017,6 @@ def train():
         os.path.join(basedir, 'summaries', expname))
     writer.set_as_default()
 
-    iters_train=[]
-    losses_train=[]
-    psnrs_train=[]
-    losses_val=[]
-    psnrs_val=[]
     for i in range(start, N_iters):
         time0 = time.time()
         depth_img = None
