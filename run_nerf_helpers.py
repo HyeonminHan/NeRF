@@ -195,7 +195,7 @@ def sample_pdf(bins, weights, N_samples, det=False):
     pdf = weights / tf.reduce_sum(weights, -1, keepdims=True)
     cdf = tf.cumsum(pdf, -1)
     cdf = tf.concat([tf.zeros_like(cdf[..., :1]), cdf], -1)
-
+    
     # Take uniform samples
     if det:
         u = tf.linspace(0., 1., N_samples)

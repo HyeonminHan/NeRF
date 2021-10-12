@@ -1,0 +1,3 @@
+CUDA_VISIBLE_DEVICES=1 python run_nerf.py --config config_ship.txt --expname sample32/originalNeRF_nocalbackgd --N_importance 16 --N_samples 16
+CUDA_VISIBLE_DEVICES=1 python run_nerf.py --config config_ship.txt --expname sample16/alpha0.5_nobackgd --use_depth --alpha 0.5 --N_importance 0 --N_samples 16
+# CUDA_VISIBLE_DEVICES=1 python run_nerf.py --config config_ship.txt --expname sample128/alpha0.3_nobackgd --use_depth --alpha 0.3 --N_importance 0 --N_samples 128

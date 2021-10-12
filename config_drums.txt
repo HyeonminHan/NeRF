@@ -1,6 +1,6 @@
 expname = lego_test
-basedir = /media/cgv/65d363cf-16d4-4526-b262-37434089751b/NeRF/logs/lego
-datadir = /media/cgv/65d363cf-16d4-4526-b262-37434089751b/NeRF/nerf_synthetic/lego
+basedir = /media/cgv/65d363cf-16d4-4526-b262-37434089751b/NeRF/logs/drums
+datadir = /media/cgv/65d363cf-16d4-4526-b262-37434089751b/NeRF/nerf_synthetic/drums
 dataset_type = blender
 
 #half_res = True
