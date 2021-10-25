@@ -31,14 +31,14 @@ def run_network(inputs, viewdirs, fn, embed_fn, embeddirs_fn, netchunk=1024*64):
     """Prepares inputs and applies network 'fn'."""
 
     inputs_flat = tf.reshape(inputs, [-1, inputs.shape[-1]])
-
     embedded = embed_fn(inputs_flat)
     if viewdirs is not None:
         input_dirs = tf.broadcast_to(viewdirs[:, None], inputs.shape)
         input_dirs_flat = tf.reshape(input_dirs, [-1, input_dirs.shape[-1]])
-        embedded_dirs = embeddirs_fn(input_dirs_flat)
-        embedded = tf.concat([embedded, embedded_dirs], -1)
 
+        embedded_dirs = embeddirs_fn(input_dirs_flat)
+
+        embedded = tf.concat([embedded, embedded_dirs], -1)
     outputs_flat = batchify(fn, netchunk)(embedded)
     outputs = tf.reshape(outputs_flat, list(
         inputs.shape[:-1]) + [outputs_flat.shape[-1]])
@@ -317,10 +317,18 @@ def render_rays(ray_batch,
 
     plt.show()
     '''
-    
+
     # Evaluate model at each point.
     raw = network_query_fn(pts, viewdirs, network_fn)  # [N_rays, N_samples, 4]
     
+    # for layer in network_fn.layers :
+    #     print("layer===",layer.output_shape)
+    #     if len(layer.get_weights())>0 :
+
+    #         # print("weight:", np.array(layer.get_weights()).shape)
+    #         print("weight[0]:", len(layer.get_weights()[0]))
+    #         print("weight[0][0]:", len(layer.get_weights()[0][0]))
+
     rgb_map, disp_map, acc_map, weights, depth_map = raw2outputs(
         raw, z_vals, rays_d)
 
@@ -541,7 +549,7 @@ def render(H, W, focal,
         # rays_d [N_rays,3]
         # depth [N_rays,1]
         
-        #'''
+        '''
         print("rays_o", rays_o)
         print("rays_d", rays_d)
         print("depth", depth)
@@ -672,7 +680,7 @@ def render(H, W, focal,
 
         plt.show()
         #return None, None, None, None
-        #'''
+        '''
 
     else : 
        near, far = near * \
@@ -739,9 +747,7 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
             print(rgb.shape, disp.shape)
 
         if gt_imgs is not None and render_factor == 0:
-            
             if depth_imgs is not None :
-
                 if use_backgd :
                     l = np.mean(np.square(rgb - gt_imgs[i]))
                     p = -10. * np.log10(l)
@@ -751,7 +757,6 @@ def render_path(render_poses, hwf, chunk, render_kwargs, gt_imgs=None, savedir=N
                     p = -10. * np.log10(l)
 
             else : 
-
                 if not cal_backgd :
                     l = np.mean(np.square(rgb[gt_imgs[i]<1.] - gt_imgs[i][gt_imgs[i]<1.]))
                     p = -10. * np.log10(l)
@@ -1528,7 +1533,7 @@ def train():
                     line1, = plt.plot(losses_train, 'b', label="train")
                     line2, = plt.plot(losses_val, 'r', label="val")
                     plt.xticks(interval_train, iters_train)
-                    plt.ylim([0., 0.08])
+                    plt.ylim([0., 0.02])
                     plt.xlabel("Iteration")
                     plt.ylabel("Loss")
                     plt.legend(handles=(line1, line2),bbox_to_anchor=(1, 1.15), ncol=2)

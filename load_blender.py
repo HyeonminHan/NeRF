@@ -74,7 +74,7 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
                 
                 #import re
                 #re.match(r"^Run.*\.py$", stringtocheck)
-                fname_d = '/'.join(fname_[:-1]) + '/' + fname_[-1][:-4] + "_depth_0001.png"
+                fname_d = '/'.join(fname_[:-1]) + '/' + fname_[-1][:-4] + "_depth_0002.png"
                 depth_imgs.append(imageio.imread(fname_d))
 
             if s=='test' and random_select:

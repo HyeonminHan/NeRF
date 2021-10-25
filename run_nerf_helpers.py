@@ -4,6 +4,7 @@ import tensorflow as tf
 import numpy as np
 import imageio
 import json
+# from keras.layers import Conv2D, MaxPool2D
 
 
 # Misc utils
@@ -74,9 +75,7 @@ def get_embedder(multires, i=0):
     def embed(x, eo=embedder_obj): return eo.embed(x)
     return embed, embedder_obj.out_dim
 
-
 # Model architecture
-
 def init_nerf_model(D=8, W=256, input_ch=3, input_ch_views=3, output_ch=4, skips=[4], use_viewdirs=False):
 
     relu = tf.keras.layers.ReLU()
@@ -94,6 +93,9 @@ def init_nerf_model(D=8, W=256, input_ch=3, input_ch_views=3, output_ch=4, skips
 
     print(inputs.shape, inputs_pts.shape, inputs_views.shape)
     outputs = inputs_pts
+    print("D:", D)
+    print("skips:", skips)
+    
     for i in range(D):
         outputs = dense(W)(outputs)
         if i in skips:
@@ -115,6 +117,70 @@ def init_nerf_model(D=8, W=256, input_ch=3, input_ch_views=3, output_ch=4, skips
         outputs = dense(output_ch, act=None)(outputs)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    # for layer in model.layers :
+    #     print("layer", i, layer.output_shape)
+    #     if len(layer.get_weights())>0 :
+
+    #         # print("weight:", np.array(layer.get_weights()).shape)
+    #         print("weight[0]:", len(layer.get_weights()[0]))
+    #         print("weight[0][0]:", len(layer.get_weights()[0][0]))
+    # exit(0)
+    return model
+
+def init_nerf_model_depthbased(D=8, W=256, input_ch=3, input_ch_views=3, output_ch=4, skips=[4], use_viewdirs=False):
+
+    relu = tf.keras.layers.ReLU()
+    def dense(W, act=relu): return tf.keras.layers.Dense(W, activation=act)
+
+    print('MODEL', input_ch, input_ch_views, type(
+        input_ch), type(input_ch_views), use_viewdirs)
+    input_ch = int(input_ch)
+    input_ch_views = int(input_ch_views)
+
+    inputs = tf.keras.Input(shape=(input_ch + input_ch_views))
+    inputs_pts, inputs_views = tf.split(inputs, [input_ch, input_ch_views], -1)
+    inputs_pts.set_shape([None, input_ch])
+    inputs_views.set_shape([None, input_ch_views])
+
+    print(inputs.shape, inputs_pts.shape, inputs_views.shape)
+    outputs = inputs
+    print("D:", D)
+    print("skips:", skips)
+    skips = []
+
+    outputs = dense(W)(outputs)
+    outputs = dense(W)(outputs)
+    alpha_out = dense(1, act=None)(outputs)
+    outputs = dense(W//2)(outputs)
+    outputs = dense(3, act=None)(outputs)
+    outputs = tf.concat([outputs, alpha_out], -1)
+
+    # if use_viewdirs:
+    #     alpha_out = dense(1, act=None)(outputs)
+    #     bottleneck = dense(256, act=None)(outputs)
+    #     inputs_viewdirs = tf.concat(
+    #         [bottleneck, inputs_views], -1)  # concat viewdirs
+    #     outputs = inputs_viewdirs
+    #     # The supplement to the paper states there are 4 hidden layers here, but this is an error since
+    #     # the experiments were actually run with 1 hidden layer, so we will leave it as 1.
+
+    #     for i in range(1):
+    #         outputs = dense(W//2)(outputs)
+    #     outputs = dense(3, act=None)(outputs)
+    #     outputs = tf.concat([outputs, alpha_out], -1)
+    # else:
+    #     outputs = dense(output_ch, act=None)(outputs)
+
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    # for layer in model.layers :
+    #     print("layer", layer.output_shape)
+    #     if len(layer.get_weights())>0 :
+
+    #         # print("weight:", np.array(layer.get_weights()).shape)
+    #         print("weight[0]:", len(layer.get_weights()[0]))
+    #         print("weight[0][0]:", len(layer.get_weights()[0][0]))
     return model
 
 
