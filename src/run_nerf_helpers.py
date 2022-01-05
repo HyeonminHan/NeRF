@@ -12,7 +12,7 @@ import json
 def img2mse(x, y): return tf.reduce_mean(tf.square(x - y))
 
 
-def mse2psnr(x): return -10.*tf.log(x)/tf.log(10.)
+def mse2psnr(x): return -10.*tf.math.log(x)/tf.math.log(10.)
 
 
 def to8b(x): return (255*np.clip(x, 0, 1)).astype(np.uint8)
@@ -182,24 +182,17 @@ def init_nerf_model_depthbased(D=8, W=256, input_ch=3, input_ch_views=3, output_
     #         print("weight[0]:", len(layer.get_weights()[0]))
     #         print("weight[0][0]:", len(layer.get_weights()[0][0]))
     return model
-
-
 # Ray helpers
 
 def get_rays(H, W, focal, c2w, depth_img=None):
     """Get ray origins, directions from a pinhole camera."""
-    
-    # if depth_img is not None :
-    #     j, i = np.where(depth_img[...,0]>0)
-    #     print("i==:", (i-W*.5)/focal)
-    #     print("W==:", W)
-    #     dirs = tf.stack([(i-W*.5)/focal, -(j-H*.5)/focal, -tf.ones_like(i)], -1)
-    # else :    
+      
     i, j = tf.meshgrid(tf.range(W, dtype=tf.float32),
                        tf.range(H, dtype=tf.float32), indexing='xy')  # i (W, H)
     dirs = tf.stack([(i-W*.5)/focal, -(j-H*.5) /
-                     focal, -tf.ones_like(i)], -1)
+                     focal, -tf.ones_like(i)], -1) # (W, H, 3)
     rays_d = tf.reduce_sum(dirs[..., np.newaxis, :] * c2w[:3, :3], -1) # (W, H, 3)
+
     rays_o = tf.broadcast_to(c2w[:3, -1], tf.shape(rays_d))# (W, H, 3)
     
     return rays_o, rays_d, depth_img  

@@ -39,6 +39,8 @@ def pose_spherical(theta, phi, radius):
 
 def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
 
+    # depth_format = 'png'
+    depth_format = 'exr'
     random_select = False
     splits = ['train', 'val', 'test']
     metas = {}
@@ -74,8 +76,14 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
                 
                 #import re
                 #re.match(r"^Run.*\.py$", stringtocheck)
-                fname_d = '/'.join(fname_[:-1]) + '/' + fname_[-1][:-4] + "_depth_0002.png"
-                depth_imgs.append(imageio.imread(fname_d))
+                # imageio.plugins.freeimage.download()
+                if depth_format == 'exr':
+                    fname_d = '/'.join(fname_[:-1]) + '/' + fname_[-1][:-4] + "_depth_0001.exr"
+                    depth_imgs.append(imageio.imread(fname_d, format='EXR-FI'))
+                elif depth_format == 'png':
+                    fname_d = '/'.join(fname_[:-1]) + '/' + fname_[-1][:-4] + "_depth_0001.png"
+                    depth_imgs.append(imageio.imread(fname_d))
+
 
             if s=='test' and random_select:
                 test_imgs.append((imageio.imread(fname)))
@@ -88,7 +96,11 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
         all_poses.append(poses)
 
         if use_depth :
-            depth_imgs = (np.array(depth_imgs) / 255.).astype(np.float32) 
+            if depth_format == 'png':
+                depth_imgs = (np.array(depth_imgs) / 255.).astype(np.float32) 
+            elif depth_format == 'exr':
+                depth_imgs = (np.array(depth_imgs)).astype(np.float32) 
+
             all_depths.append(depth_imgs)
 
     if random_select : 
@@ -126,8 +138,6 @@ def load_blender_data(basedir, half_res=False, testskip=1, use_depth=False):
     # print("imgs", imgs.shape)
     # print("imgs", depth_imgs.shape)
     # print("i_split", i_split)
-
-    import matplotlib.pyplot as plt
 
     if use_depth:
         return imgs, poses, render_poses, [H, W, focal], i_split, depth_imgs
