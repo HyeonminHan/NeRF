@@ -1154,7 +1154,6 @@ def train():
             render_depths = np.array(depth_imgs[i_test])
         else:
             render_depths = None
-        print("depth_imgs:", depth_imgs[0].shape)
         
     elif args.dataset_type == 'deepvoxels':
 
@@ -1571,7 +1570,6 @@ def train():
                 img_val_i_s = np.random.choice(i_val, val_size)
                 val_losses =[]
                 val_psnrs=[]
-                print("i_val:", i_val)
 
                 for img_val_i in img_val_i_s:
 
@@ -1585,10 +1583,8 @@ def train():
                             rgb, disp, acc, extras = render(
                                 H, W, focal, chunk=args.chunk, c2w=pose, depth_img=depthmap, **render_kwargs_test)
                         elif depthimg_mode == 'GT':
-                            print("depth_img:", depth_imgs[img_val_i].shape)
                             rgb, disp, acc, extras = render(
                                 H, W, focal, chunk=args.chunk, c2w=pose, depth_img=depth_imgs[img_val_i], **render_kwargs_test)
-                            print("rgb:", rgb.shape)
 
                         
                         # plt.figure()
@@ -1611,8 +1607,6 @@ def train():
                         else :
                             depth = depth_imgs[img_val_i][...,:3]
                             # depth = depthmap[...,:3]
-                            print("depth:", depth.shape)
-                            print("rgb:", rgb.shape)
                             rgb = tf.where(np.logical_and(depth > 0, depth<1000), rgb, tf.ones(depth.shape))
                             
                             loss_val = np.mean(np.square(rgb[np.logical_and(depth > 0, depth<1000)] - target[np.logical_and(depth > 0, depth<1000)]))
