@@ -195,7 +195,6 @@ def render_rays(ray_batch,
     # exit()
     '''
 
-
     '''SKEW DISTRIBUTION SAMPLING
     from scipy.stats import skewnorm
 
@@ -209,7 +208,6 @@ def render_rays(ray_batch,
     # print("skew z_vals shape:" ,z_vals.shape)
     # exit()
     '''
-
 
     #'''#####################################################
     # near - 2.0, far - 6.0
@@ -249,9 +247,8 @@ def render_rays(ray_batch,
 
 
 
-    
+    ### 샘플링 점 visualization
     '''
-
     z_vals2 = near2 * (1.-t_vals) + far2 * (t_vals)
     z_vals2 = tf.broadcast_to(z_vals2, [N_rays, N_samples])
     pts2 = rays_o[..., None, :] + rays_d[..., None, :] * \
@@ -351,6 +348,7 @@ def render_rays(ray_batch,
         pts = rays_o[..., None, :] + rays_d[..., None, :] * \
             z_vals[..., :, None]  # [N_rays, N_samples + N_importance, 3]
 
+        ### 샘플링 점 visualization
         '''
         pts_passed = rays_o[..., None, :] + rays_d[..., None, :] * \
             z_samples[..., :, None]  # [N_rays, N_importance, 3]
@@ -533,11 +531,12 @@ def render(H, W, focal,
                 # far = tf.where(depth < quantiz_coef, depth + args.alpha, tf.constant(args.far,shape=depth.shape))
 
                 ####ESTIMATED DEPTH
-                near = tf.where(tf.logical_and(depth > 0,depth<1000), depth - args.alpha, tf.constant(args.near,shape=depth.shape))
-                far = tf.where(tf.logical_and(depth > 0,depth<1000), depth + args.alpha, tf.constant(args.far,shape=depth.shape))
+                # near = tf.where(tf.logical_and(depth > 0,depth<1000), depth - args.alpha, tf.constant(args.near,shape=depth.shape))
+                # far = tf.where(tf.logical_and(depth > 0,depth<1000), depth + args.alpha, tf.constant(args.far,shape=depth.shape))
+                near = tf.where(tf.logical_and(depth != args.back_value, depth<1000), depth - args.alpha, tf.constant(args.near,shape=depth.shape))
+                far = tf.where(tf.logical_and(depth != args.back_value,depth<1000), depth + args.alpha, tf.constant(args.far,shape=depth.shape))
 
             else :
-                # print("depthshape1:", depth.shape)
                 near = tf.where(depth<1000, depth - args.alpha, tf.constant(0.,shape=depth.shape))
                 far = tf.where(depth<1000, depth + args.alpha, tf.constant(1.,shape=depth.shape))
                 # far = depth[depth<1000] + args.alpha
@@ -564,6 +563,7 @@ def render(H, W, focal,
         # rays_d [N_rays,3]
         # depth [N_rays,1]
 
+        ### 샘플링 점 visualization
         '''
         print("rays_o", rays_o)
         print("rays_d", rays_d)
@@ -719,13 +719,9 @@ def render(H, W, focal,
        near, far = near * \
            tf.ones_like(rays_d[..., :1]), far * tf.ones_like(rays_d[..., :1])
 
-
     # (ray origin, ray direction, min dist, max dist) for each ray
-
     rays = tf.concat([rays_o, rays_d, near, far], axis=-1)
 
-    # print("rays:,", rays)
-    # print("rays:,", rays.shape)
     if use_viewdirs:
         # (ray origin, ray direction, min dist, max dist, normalized viewing direction)
         rays = tf.concat([rays, viewdirs], axis=-1)
@@ -781,7 +777,7 @@ def render_path(pc, render_poses, hwf, chunk, render_kwargs, gt_imgs=None, saved
             
             if not use_backgd : 
                 depth = depth_imgs[i][...,:3]
-                rgb = tf.where(np.logical_and(depth > 0, depth<1000), rgb, tf.ones(depth.shape))
+                rgb = tf.where(np.logical_and(depth != args.back_value, depth<1000), rgb, tf.ones(depth.shape))
         else : 
             rgb, disp, acc, _ = render(H, W, focal, chunk=chunk, c2w=c2w[:3, :4], **render_kwargs)
         
@@ -797,7 +793,7 @@ def render_path(pc, render_poses, hwf, chunk, render_kwargs, gt_imgs=None, saved
                     p = -10. * np.log10(l)
 
                 else :
-                    l = np.mean(np.square(rgb[np.logical_and(depth > 0, depth<1000)] - gt_imgs[i][np.logical_and(depth > 0, depth<1000)]))
+                    l = np.mean(np.square(rgb[np.logical_and(depth != args.back_value, depth<1000)] - gt_imgs[i][np.logical_and(depth != args.back_value, depth<1000)]))
                     p = -10. * np.log10(l)
 
             else : 
@@ -1002,6 +998,8 @@ def config_parser():
                         help='number of coarse samples per ray')
     parser.add_argument("--kernel_size", type=int, default=5,
                         help='number of coarse samples per ray')
+    parser.add_argument("--back_value", type=float, default=1000,
+                        help='value of backgound')
 
     # dataset options
     parser.add_argument("--dataset_type", type=str, default='llff',
@@ -1139,8 +1137,7 @@ def train():
 
         print("expname:", args.expname)
         if depthimg_mode == 'ESTIMATE':
-            pc = pointcloud.make_PC(images[i_train], depth_imgs[i_train], hwf[2], poses[i_train], args.pc_viewnum, back_value=1000)
-            
+            pc = pointcloud.make_PC(images[i_train], depth_imgs[i_train], hwf[2], poses[i_train], args.pc_viewnum, args.back_value)
 
         # exit()
         near = 2.
@@ -1607,9 +1604,9 @@ def train():
                         else :
                             depth = depth_imgs[img_val_i][...,:3]
                             # depth = depthmap[...,:3]
-                            rgb = tf.where(np.logical_and(depth > 0, depth<1000), rgb, tf.ones(depth.shape))
+                            rgb = tf.where(np.logical_and(depth != args.back_value, depth<1000), rgb, tf.ones(depth.shape))
                             
-                            loss_val = np.mean(np.square(rgb[np.logical_and(depth > 0, depth<1000)] - target[np.logical_and(depth > 0, depth<1000)]))
+                            loss_val = np.mean(np.square(rgb[np.logical_and(depth != args.back_value, depth<1000)] - target[np.logical_and(depth != args.back_value, depth<1000)]))
                             psnr_val = -10. * np.log10(loss_val)
 
                     else:
