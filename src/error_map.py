@@ -31,7 +31,7 @@ gt = cv2.imread("/home/cgv/NeRF/data_in_paper/gt.png", 0)
 psnr = calculate_psnr(img1, gt)
 psnr2 = calculate_psnr(img2, gt)
 print(psnr)
-print(psnr2)
+print(psnr2)#
 error_map = error_psnr(img1,gt)
 error_map2 = error_psnr(img2,gt)
 np_error_map = np.array(error_map)
